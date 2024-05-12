@@ -1,0 +1,6 @@
+.env
+.idea
+.venv
+opencv-4.9.0
+build_opencv
+*.iml

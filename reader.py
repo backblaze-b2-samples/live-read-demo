@@ -16,6 +16,10 @@ logger = logging.getLogger(os.path.basename(__file__))
 
 
 def add_custom_header(params, **_kwargs):
+    """
+    Add the Live Read custom headers to the outgoing request.
+    See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html
+    """
     params["headers"]['x-bz-active-read-enabled'] = 'true'
 
 
@@ -40,15 +44,14 @@ def main():
     else:
         logger.warning("No environment variables in .env")
 
-    # Create a boto3 client base on configuration in .env file
+    # Create a boto3 client based on configuration in .env file
     # AWS_ACCESS_KEY_ID=<Your Backblaze Application Key ID>
     # AWS_SECRET_ACCESS_KEY=<Your Backblaze Application Key>
     # AWS_ENDPOINT_URL=<Your B2 bucket endpoint, with https protocol, e.g. https://s3.us-west-004.backblazeb2.com>
     b2_client = boto3.client('s3')
     logger.debug("Created boto3 client")
 
-    event_system = b2_client.meta.events
-    event_system.register('before-call.s3.GetObject', add_custom_header)
+    b2_client.meta.events.register('before-call.s3.GetObject', add_custom_header)
 
     part_number = 1
     while True:
@@ -59,7 +62,7 @@ def main():
                 Key=args.key,
                 PartNumber=part_number
             )
-            logger.debug('Got part number %s', part_number)
+            logger.debug('Got part number %s with size %s', part_number, response['ContentLength'])
             sys.stdout.buffer.write(response['Body'].read())
             sys.stdout.buffer.flush()
             part_number += 1
@@ -77,11 +80,12 @@ def main():
                     logger.debug("Upload is complete.")
                     break
                 else:
-                    logger.warning('Cannot get part number %s. Will retry in %s seconds', part_number,
+                    logger.warning('Cannot get part number %s. Will retry in %s second(s)', part_number,
                                    args.poll_interval)
 
             elif e.response['ResponseMetadata']['HTTPStatusCode'] == http.HTTPStatus.NOT_FOUND:
-                logger.warning('%s/%s does not (yet?) exist. Will retry in %s seconds', args.bucket, args.key,
+                # Keep trying until the parts become available
+                logger.warning('%s/%s does not (yet?) exist. Will retry in %s second(s)', args.bucket, args.key,
                                args.poll_interval)
             else:
                 logger.error('get_object returned HTTP status %s\n%s\nExiting',

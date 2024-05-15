@@ -11,8 +11,6 @@ logging.basicConfig()
 
 logger = logging.getLogger(os.path.basename(__file__))
 
-# Stdin processing with signal handling from https://stackoverflow.com/a/67195451/33905
-
 # See https://www.backblaze.com/docs/cloud-storage-large-files
 MIN_CHUNK_SIZE = 5 * 1024 * 1024
 MAX_CHUNK_SIZE = 5 * 1024 * 1024 * 1024
@@ -29,13 +27,18 @@ def signal_handler(sig, _frame):
     """
     By default, Python would raise a KeyboardInterrupt on SIGINT and terminate the program on SIGTERM. We want to
     finish processing any buffered input from stdin, at which point read_stdin_stream will return, and we will
-    complete the multipart upload.
+    complete the multipart upload. So, we don't need to do anything here other than log the fact that we caught
+    the signal.
     """
     logger.info('Caught signal %s. Processing remaining data.', signal.Signals(sig).name)
 
 
 # noinspection PyUnresolvedReferences
 def add_custom_header(params, **_kwargs):
+    """
+    Add the Live Read custom headers to the outgoing request.
+    See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html
+    """
     global args
 
     params["headers"]['x-bz-active-read-enabled'] = 'true'
@@ -106,7 +109,8 @@ def complete_upload():
             UploadId=upload_id
         )
     else:
-        logger.warning("No upload to complete")
+        # This should never happen!
+        logger.error("No upload to complete")
     if args.dots:
         print('\n', flush=True, end='')
 
@@ -138,15 +142,14 @@ def main():
     else:
         logger.warning("No environment variables in .env")
 
-    # Create a boto3 client base on configuration in .env file
+    # Create a boto3 client based on configuration in .env file
     # AWS_ACCESS_KEY_ID=<Your Backblaze Application Key ID>
     # AWS_SECRET_ACCESS_KEY=<Your Backblaze Application Key>
     # AWS_ENDPOINT_URL=<Your B2 bucket endpoint, with https protocol, e.g. https://s3.us-west-004.backblazeb2.com>
     b2_client = boto3.client('s3')
     logger.debug("Created boto3 client")
 
-    event_system = b2_client.meta.events
-    event_system.register('before-call.s3.CreateMultipartUpload', add_custom_header)
+    b2_client.meta.events.register('before-call.s3.CreateMultipartUpload', add_custom_header)
 
     start_upload()
 

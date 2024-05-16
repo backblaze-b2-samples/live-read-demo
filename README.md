@@ -11,10 +11,14 @@ file. This is particularly useful in working with live video streams using forma
 ## How Does Live Read Work?
 
 A producer client starts a Live Read upload by sending a [CreateMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html)
-request with two custom HTTP parameters: `x-bz-active-read-enabled` and `x-bz-active-read-part-size`. `x-bz-active-read-enabled`
-must be set to `true` for a Live Read upload to be initiated, while, optionally, `x-bz-active-read-part-size` may be set to the
+request with two custom HTTP parameters: `x-bz-active-read-enabled` and, optionally, `x-bz-active-read-part-size`. `x-bz-active-read-enabled`
+must be set to `true` for a Live Read upload to be initiated, while `x-bz-active-read-part-size` may be set to the
 part size that will be used.  If `x-bz-active-read-enabled` is set to `true` and `x-bz-active-read-part-size` is not
 present then the size of the first part will be used. All parts except the last one must have the same size.
+
+The producer client then uploads a series of parts, via [UploadPart](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html), as normal. As noted above, all parts except the last one must have the same size. Once the producer client has uploaded all of its data, it calls [CompleteMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html), again, as it usually would.
+
+Under the standard S3 API semantics, consumer clients must wait for the upload to be completed before they may download any data from the file. With Live Read, in contrast, consumer clients may attempt to download data from the file at any time after the upload is created. TBD... 
 
 ## What's in This Repository?
 

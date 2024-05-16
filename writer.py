@@ -33,6 +33,7 @@ def parse_command_line_args():
     parser.add_argument('key', type=str, help='object key')
     parser.add_argument('--chunk_size', type=int, required=False, default=DEFAULT_CHUNK_SIZE, help='chunk size')
     parser.add_argument('--debug', action='store_true', help='debug logging')
+    parser.add_argument('--debug-boto', action='store_true', help='debug logging for boto3')
     return parser.parse_args()
 
 
@@ -41,7 +42,7 @@ def add_custom_header(params, **_kwargs):
     Add the Live Read custom headers to the outgoing request.
     See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html
     """
-    params["headers"]['x-bz-active-read-enabled'] = 'true'
+    params['headers']['x-bz-active-read-enabled'] = 'true'
 
 
 def start_upload(b2_client, bucket, key):
@@ -112,6 +113,9 @@ def main():
     args = parse_command_line_args()
 
     logger.setLevel(logging.DEBUG if args.debug else logging.WARN)
+
+    if args.debug_boto:
+        logging.getLogger('botocore').setLevel(logging.DEBUG)
 
     logger.debug("Command-line arguments: %s", args)
 

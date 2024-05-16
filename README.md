@@ -84,7 +84,8 @@ fifo and fMP4 to its standard output. We pipe the standard output into `writer.p
 The `--debug` flag provides some useful insight into its operation.
 
 ```shell
-ffplay -f rawvideo -video_size 1920x1080 -framerate 30 -pixel_format uyvy422 raw_video_fifo &
+ffplay -vf "drawtext=text='%{pts\:hms}':fontsize=72:box=1:x=(w-tw)/2:y=h-(2*lh)" \
+       -f rawvideo -video_size 1920x1080 -framerate 30 -pixel_format uyvy422 raw_video_fifo &
 ffmpeg -f avfoundation -video_size 1920x1080 -r 30 -pix_fmt uyvy422 -probesize 10000000 -i "0:0" \
        -f rawvideo raw_video_fifo -y \
        -f mp4 -vcodec libx264 -g 60 -movflags empty_moov+frag_keyframe - | \
@@ -115,11 +116,12 @@ ffmpeg -f avfoundation -video_size 1920x1080 -r 30 -pix_fmt uyvy422 -probesize 1
   of each fragment.
 
 ```shell
-ffplay -f rawvideo -video_size 1920x1080 -framerate 30 -pixel_format uyvy422 raw_video_fifo &
+ffplay -vf "drawtext=text='%{pts\:hms}':fontsize=72:box=1:x=(w-tw)/2:y=h-(2*lh)" \
+       -f rawvideo -video_size 1920x1080 -framerate 30 -pixel_format uyvy422 raw_video_fifo &
 ```
 
-The `ffplay` command line specifies the video format, resolution, frame rate and pixel format, since none of this 
-information is in the stream.
+The `ffplay` command line shows a timestamp on the display and specifies the video format, resolution, frame rate and 
+pixel format, since none of this information is in the stream.
 
 After a few seconds, the `ffplay` window appears, showing the live camera feed.
 
@@ -135,13 +137,30 @@ DEBUG:writer.py:Uploaded part number 1; ETag is "7c223b579b7da8dd1b433d6eb2d0f14
 _In practice, the debug output from `ffmpeg` and `writer.py` is interleaved. I've removed `ffmpeg`'s debug output for 
 clarity._
 
+Once the first part has been uploaded, you can monitor the total size of the uploaded parts:
+
+```shell
+#! /bin/bash
+
+UPLOAD_ID="null"
+until [ $UPLOAD_ID != "null" ]
+do
+    UPLOAD_ID=$(aws s3api list-multipart-uploads --bucket metadaddy-public --key-marker liveread.mp4 --max-uploads 1 \
+        | jq -r '.Uploads[0].UploadId')
+    sleep 1
+    echo -n "."
+done
+watch -n 1 "aws s3api list-parts --bucket metadaddy-public --key liveread.mp4 --upload-id ${UPLOAD_ID} | jq '[.Parts[].Size] | add'"
+```
+
 ### Start the Reader, Piping Its Output to the Display
 
 Start `reader.py` in a second Terminal window, piping its output to `ffplay`. Note the `-` argument - this tells 
 `ffplay` to read `stdin`:
 
 ```shell
-python reader.py metadaddy-public liveread.mp4 --debug | ffplay -
+python reader.py metadaddy-public liveread.mp4 --debug \
+    | ffplay -vf "drawtext=text='%{pts\:hms}':fontsize=72:box=1:x=(w-tw)/2:y=h-(2*lh)" -
 ```
 
 `reader.py` will start reading the available parts as soon as they are available:

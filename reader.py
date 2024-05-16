@@ -15,6 +15,17 @@ logging.basicConfig()
 logger = logging.getLogger(os.path.basename(__file__))
 
 
+def parse_command_line_args():
+    parser = argparse.ArgumentParser(description='Copy stdin to a Backblaze B2 Live Read file')
+    parser.add_argument('bucket', type=str, help='a bucket name')
+    parser.add_argument('key', type=str, help='object key')
+    parser.add_argument('--poll_interval', type=int, required=False, default=1, help='poll interval')
+    parser.add_argument('--debug', action='store_true', help='debug logging')
+    parser.add_argument('--dots', action='store_true', help='print a dot as each chunk is downloaded')
+    args = parser.parse_args()
+    return args
+
+
 def add_custom_header(params, **_kwargs):
     """
     Add the Live Read custom headers to the outgoing request.
@@ -25,21 +36,13 @@ def add_custom_header(params, **_kwargs):
 
 # noinspection DuplicatedCode
 def main():
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(description='Copy stdin to a Backblaze B2 Live Read file')
-    parser.add_argument('bucket', type=str, help='a bucket name')
-    parser.add_argument('key', type=str, help='object key')
-    parser.add_argument('--poll_interval', type=int, required=False, default=1, help='poll interval')
-    parser.add_argument('--debug', action='store_true', help='debug logging')
-    parser.add_argument('--dots', action='store_true', help='print a dot as each chunk is downloaded')
-    args = parser.parse_args()
+    args = parse_command_line_args()
 
     logger.setLevel(logging.DEBUG if args.debug else logging.WARN)
 
     logger.debug("Command-line arguments: %s", args)
 
-    loaded = load_dotenv()
-    if loaded:
+    if load_dotenv():
         logger.debug("Loaded environment variables from .env")
     else:
         logger.warning("No environment variables in .env")

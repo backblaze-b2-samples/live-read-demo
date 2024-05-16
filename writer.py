@@ -16,12 +16,6 @@ MIN_CHUNK_SIZE = 5 * 1024 * 1024
 MAX_CHUNK_SIZE = 5 * 1024 * 1024 * 1024
 DEFAULT_CHUNK_SIZE = MIN_CHUNK_SIZE
 
-args = None
-b2_client = None
-parts = []
-part_number = 1
-upload_id = None
-
 
 def signal_handler(sig, _frame):
     """
@@ -33,69 +27,69 @@ def signal_handler(sig, _frame):
     logger.info('Caught signal %s. Processing remaining data.', signal.Signals(sig).name)
 
 
-# noinspection PyUnresolvedReferences
+def parse_command_line_args():
+    parser = argparse.ArgumentParser(description='Copy stdin to a Backblaze B2 Live Read file')
+    parser.add_argument('bucket', type=str, help='a bucket name')
+    parser.add_argument('key', type=str, help='object key')
+    parser.add_argument('--chunk_size', type=int, required=False, default=DEFAULT_CHUNK_SIZE, help='chunk size')
+    parser.add_argument('--debug', action='store_true', help='debug logging')
+    return parser.parse_args()
+
+
 def add_custom_header(params, **_kwargs):
     """
     Add the Live Read custom headers to the outgoing request.
     See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html
     """
-    global args
-
     params["headers"]['x-bz-active-read-enabled'] = 'true'
-    params["headers"]['x-bz-active-read-part-size'] = str(args.chunk_size)
 
 
-# noinspection PyUnresolvedReferences
-def start_upload():
-    global upload_id, args
-
-    response = b2_client.create_multipart_upload(Bucket=args.bucket, Key=args.key)
+def start_upload(b2_client, bucket, key):
+    response = b2_client.create_multipart_upload(Bucket=bucket, Key=key)
     upload_id = response['UploadId']
     logger.debug("Created multipart upload. UploadId is %s", upload_id)
+    return upload_id
 
 
 # noinspection PyUnresolvedReferences
-def upload_part(buffer):
-    global b2_client, parts, part_number, args, upload_id
-
+def upload_part(b2_client, bucket, key, upload_id, buffer, part_number):
     logger.debug("Uploading part number %s with size %s", part_number, len(buffer))
     response = b2_client.upload_part(
-        Bucket=args.bucket,
-        Key=args.key,
+        Bucket=bucket,
+        Key=key,
         Body=buffer,
         PartNumber=part_number,
         UploadId=upload_id
     )
     logger.debug("Uploaded part number %s; ETag is %s", part_number, response['ETag'])
-    if args.dots:
-        print('.', flush=True, end='')
-    parts.append({
+    return {
         "ETag": response['ETag'],
         'PartNumber': part_number
-    })
-    part_number += 1
+    }
 
 
 # noinspection PyUnresolvedReferences
-def read_stdin_stream(handler, chunk_size=DEFAULT_CHUNK_SIZE):
+def upload_from_stdin(b2_client, bucket, key, upload_id, chunk_size):
+    parts = []
+    part_number = 1
     with sys.stdin as f:
         while True:
             buffer = f.buffer.read(chunk_size)
             if buffer == b'':
                 # EOF or read() was interrupted and there is no data left
                 break
-            handler(buffer)
+            parts.append(upload_part(b2_client, bucket, key, upload_id, buffer, part_number))
+            part_number += 1
+    return parts
 
 
 # noinspection PyUnresolvedReferences
-def complete_upload():
-    global b2_client, args, parts, upload_id
-
+def complete_upload(b2_client, bucket, key, upload_id, parts):
     if len(parts) > 0:
         logger.debug("Completing multipart upload with %s parts", len(parts))
         b2_client.complete_multipart_upload(
-            Bucket=args.bucket,
-            Key=args.key,
+            Bucket=bucket,
+            Key=key,
             MultipartUpload={
                 'Parts': parts
             },
@@ -104,43 +98,31 @@ def complete_upload():
     elif upload_id:
         logger.warning("Aborting multipart upload since there are no parts!")
         b2_client.abort_multipart_upload(
-            Bucket=args.bucket,
-            Key=args.key,
+            Bucket=bucket,
+            Key=key,
             UploadId=upload_id
         )
     else:
         # This should never happen!
         logger.error("No upload to complete")
-    if args.dots:
-        print('\n', flush=True, end='')
 
 
 # noinspection DuplicatedCode
 def main():
-    global b2_client, args, upload_id
-
-    # Install handler to override the KeyboardInterrupt on SIGINT or SIGTERM
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(description='Copy stdin to a Backblaze B2 Live Read file')
-    parser.add_argument('bucket', type=str, help='a bucket name')
-    parser.add_argument('key', type=str, help='object key')
-    parser.add_argument('--chunk_size', type=int, required=False, default=DEFAULT_CHUNK_SIZE, help='chunk size')
-    parser.add_argument('--debug', action='store_true', help='debug logging')
-    parser.add_argument('--dots', action='store_true', help='print a dot as each part is uploaded')
-    args = parser.parse_args()
+    args = parse_command_line_args()
 
     logger.setLevel(logging.DEBUG if args.debug else logging.WARN)
 
     logger.debug("Command-line arguments: %s", args)
 
-    loaded = load_dotenv()
-    if loaded:
+    if load_dotenv():
         logger.debug("Loaded environment variables from .env")
     else:
         logger.warning("No environment variables in .env")
+
+    # Install handler to override the KeyboardInterrupt on SIGINT or SIGTERM
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     # Create a boto3 client based on configuration in .env file
     # AWS_ACCESS_KEY_ID=<Your Backblaze Application Key ID>
@@ -151,11 +133,11 @@ def main():
 
     b2_client.meta.events.register('before-call.s3.CreateMultipartUpload', add_custom_header)
 
-    start_upload()
+    upload_id = start_upload(b2_client, args.bucket, args.key)
 
-    read_stdin_stream(upload_part, chunk_size=args.chunk_size)
+    parts = upload_from_stdin(b2_client, args.bucket, args.key, upload_id, args.chunk_size)
 
-    complete_upload()
+    complete_upload(b2_client, args.bucket, args.key, upload_id, parts)
 
     logger.debug("Exiting Normally.")
 

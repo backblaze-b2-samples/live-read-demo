@@ -1,44 +1,43 @@
 import argparse
-import http
-import json
 import logging
 import os
 import sys
-import time
 
-import boto3
-from botocore.exceptions import ClientError
 from dotenv import load_dotenv
+
+from downloader import LiveReadDownloader
 
 logging.basicConfig()
 
 logger = logging.getLogger(os.path.basename(__file__))
 
+# Default to minimum part size
+DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024
 
-def parse_command_line_args():
+# Limit the number of chunks we read into memory
+DEFAULT_QUEUE_SIZE = 4
+
+
+def parse_command_line_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Copy stdin to a Backblaze B2 Live Read file')
     parser.add_argument('bucket', type=str, help='a bucket name')
     parser.add_argument('key', type=str, help='object key')
-    parser.add_argument('--poll_interval', type=int, required=False, default=1, help='poll interval')
+    parser.add_argument('--poll-interval', type=int, required=False, default=1, help='poll interval')
+    parser.add_argument('--chunk-size', type=int, required=False, default=DEFAULT_CHUNK_SIZE, help='chunk size')
     parser.add_argument('--debug', action='store_true', help='debug logging')
     parser.add_argument('--debug-boto', action='store_true', help='debug logging for boto3')
+    parser.add_argument('--queue-size', type=int, required=False, default=DEFAULT_QUEUE_SIZE, help='queue size')
     args = parser.parse_args()
     return args
-
-
-def add_custom_header(params, **_kwargs):
-    """
-    Add the Live Read custom headers to the outgoing request.
-    See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html
-    """
-    params['headers']['x-bz-active-read-enabled'] = 'true'
 
 
 # noinspection DuplicatedCode
 def main():
     args = parse_command_line_args()
 
-    logger.setLevel(logging.DEBUG if args.debug else logging.WARN)
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+        logging.getLogger('downloader').setLevel(logging.DEBUG)
 
     if args.debug_boto:
         logging.getLogger('botocore').setLevel(logging.DEBUG)
@@ -50,76 +49,13 @@ def main():
     else:
         logger.warning("No environment variables in .env")
 
-    # Create a boto3 client based on configuration in .env file
-    # AWS_ACCESS_KEY_ID=<Your Backblaze Application Key ID>
-    # AWS_SECRET_ACCESS_KEY=<Your Backblaze Application Key>
-    # AWS_ENDPOINT_URL=<Your B2 bucket endpoint, with https protocol, e.g. https://s3.us-west-004.backblazeb2.com>
-    b2_client = boto3.client('s3')
-    logger.debug("Created boto3 client")
+    downloader = LiveReadDownloader(args.bucket, args.key, args.poll_interval, args.chunk_size, args.queue_size)
+    downloader.start()
 
-    b2_client.meta.events.register('before-call.s3.GetObject', add_custom_header)
+    logger.debug('###')
 
-    # Get the UploadId of the current upload, so we can get the correct file version
-    while True:
-        response = b2_client.list_multipart_uploads(
-            Bucket=args.bucket,
-            KeyMarker=args.key,
-            MaxUploads=1
-        )
-        if 'Uploads' in response:
-            break
-
-        logger.info('No active upload for %s/%s. Will retry in %s second(s).',
-                    args.bucket, args.key, args.poll_interval)
-        time.sleep(args.poll_interval)
-
-    # The last entry in the list is the most recent upload
-    # The UploadId is the same as the file's VersionId
-    upload_id = response['Uploads'][len(response['Uploads']) - 1]['UploadId']
-    logger.debug('Reading UploadId %s', upload_id)
-
-    part_number = 1
-    while True:
-        try:
-            logger.debug('Getting part number %s', part_number)
-            response = b2_client.get_object(
-                Bucket=args.bucket,
-                Key=args.key,
-                VersionId=upload_id,
-                PartNumber=part_number
-            )
-            logger.debug('Got part number %s with size %s', part_number, response['ContentLength'])
-            sys.stdout.buffer.write(response['Body'].read())
-            sys.stdout.buffer.flush()
-            part_number += 1
-        except ClientError as e:
-            if e.response['ResponseMetadata']['HTTPStatusCode'] == http.HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE:
-                # The requested part does not exist
-                # Is the upload still in progress?
-                response = b2_client.list_multipart_uploads(
-                    Bucket=args.bucket,
-                    KeyMarker=args.key,
-                    MaxUploads=1
-                )
-                if 'Uploads' not in response:
-                    # Upload has finished - we're done
-                    logger.debug("Upload is complete.")
-                    break
-                else:
-                    logger.warning('Cannot get part number %s. Will retry in %s second(s)', part_number,
-                                   args.poll_interval)
-
-            elif e.response['ResponseMetadata']['HTTPStatusCode'] == http.HTTPStatus.NOT_FOUND:
-                # Keep trying until the parts become available
-                logger.warning('%s/%s does not (yet?) exist. Will retry in %s second(s)', args.bucket, args.key,
-                               args.poll_interval)
-            else:
-                logger.error('get_object returned HTTP status %s\n%s\nExiting',
-                             e.response['ResponseMetadata']['HTTPStatusCode'],
-                             json.dumps(e.response['Error']))
-                exit(2)
-
-            time.sleep(args.poll_interval)
+    while data := downloader.get_data():
+        sys.stdout.buffer.write(data)
 
     logger.debug("Exiting Normally.")
 

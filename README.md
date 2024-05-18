@@ -93,7 +93,7 @@ ffplay -vf "drawtext=text='%{pts\:hms}':fontsize=72:box=1:x=(w-tw)/2:y=h-(2*lh)"
 ffmpeg -f avfoundation -video_size 1920x1080 -r 30 -pix_fmt uyvy422 -probesize 10000000 -i "0:0" \
        -f rawvideo raw_video_fifo -y \
        -f mp4 -vcodec libx264 -g 60 -movflags empty_moov+frag_keyframe - | \
-python writer.py metadaddy-public liveread.mp4 --debug
+python writer.py my-bucket myfile.mp4 --debug
 ```
 
 Picking apart the `ffmpeg` command line:
@@ -149,12 +149,12 @@ Once the first part has been uploaded, you can monitor the total size of the upl
 UPLOAD_ID="null"
 until [ $UPLOAD_ID != "null" ]
 do
-    UPLOAD_ID=$(aws s3api list-multipart-uploads --bucket metadaddy-public --key-marker liveread.mp4 --max-uploads 1 \
+    UPLOAD_ID=$(aws s3api list-multipart-uploads --bucket my-bucket --key-marker myfile.mp4 --max-uploads 1 \
         | jq -r '.Uploads[0].UploadId')
     sleep 1
     echo -n "."
 done
-watch -n 1 "aws s3api list-parts --bucket metadaddy-public --key liveread.mp4 --upload-id ${UPLOAD_ID} | jq '[.Parts[].Size] | add'"
+watch -n 1 "aws s3api list-parts --bucket my-bucket --key myfile.mp4 --upload-id ${UPLOAD_ID} | jq '[.Parts[].Size] | add'"
 ```
 
 ### Start the Reader, Piping Its Output to the Display
@@ -163,7 +163,7 @@ Start `reader.py` in a second Terminal window, piping its output to `ffplay`. No
 `ffplay` to read `stdin`:
 
 ```shell
-python reader.py metadaddy-public liveread.mp4 --debug \
+python reader.py my-bucket myfile.mp4 --debug \
     | ffplay -vf "drawtext=text='%{pts\:hms}':fontsize=72:box=1:x=(w-tw)/2:y=h-(2*lh)" -
 ```
 
@@ -207,10 +207,10 @@ DEBUG:reader.py:Exiting Normally.
 The uploaded video data is stored as a single file, and can be accessed in the usual way:
 
 ```console
-% aws s3 ls --human-readable s3://metadaddy-public/liveread.mp4
-2024-05-15 12:15:50   14.9 MiB liveread.mp4
-% ffprobe -hide_banner -i https://s3.us-west-004.backblazeb2.com/metadaddy-public/liveread.mp4
-Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'https://s3.us-west-004.backblazeb2.com/metadaddy-public/liveread.mp4':
+% aws s3 ls --human-readable s3://my-bucket/myfile.mp4
+2024-05-15 12:15:50   14.9 MiB myfile.mp4
+% ffprobe -hide_banner -i https://s3.us-west-004.backblazeb2.com/my-bucket/myfile.mp4
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'https://s3.us-west-004.backblazeb2.com/my-bucket/myfile.mp4':
   Metadata:
     major_brand     : isom
     minor_version   : 512

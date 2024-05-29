@@ -30,7 +30,6 @@ def signal_handler(sig, _frame):
 
 def parse_command_line_args():
     parser = argparse.ArgumentParser(description='Copy stdin to a Backblaze B2 Live Read file')
-    parser.add_argument('bucket', type=str, help='a bucket name')
     parser.add_argument('key', type=str, help='object key')
     parser.add_argument('--chunk_size', type=int, required=False, default=DEFAULT_CHUNK_SIZE, help='chunk size')
     parser.add_argument('--debug', action='store_true', help='debug logging')
@@ -75,7 +74,7 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    uploader = LiveReadUploader(args.bucket, args.key)
+    uploader = LiveReadUploader(os.environ['BUCKET_NAME'], args.key)
     uploader.start()
 
     read_stdin_to_queue(uploader, args.chunk_size)

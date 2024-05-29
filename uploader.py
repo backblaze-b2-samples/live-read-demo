@@ -149,4 +149,4 @@ def add_custom_header(params, **_kwargs):
     Add the Live Read custom headers to the outgoing request.
     See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html
     """
-    params['headers']['x-bz-live-read-enabled'] = 'true'
+    params['headers']['x-backblaze-live-read-enabled'] = 'true'

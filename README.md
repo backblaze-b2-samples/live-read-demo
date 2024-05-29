@@ -6,19 +6,19 @@ file. This is particularly useful in working with live video streams using forma
 
 [TBD - how to get access to Live Read.]
 
-[TBD - add demo video]
+This short video explains how Live Read works and shows it in action:
+
+[![Live Read Video on YouTube](https://img.youtube.com/vi/JTI2kkysRWE/mqdefault.jpg)](https://www.youtube.com/watch?v=JTI2kkysRWE)
 
 ## How Does Live Read Work?
 
-A producer client starts a Live Read upload by sending a [CreateMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html)
-request with two custom HTTP parameters: `x-bz-active-read-enabled` and, optionally, `x-bz-active-read-part-size`. `x-bz-active-read-enabled`
-must be set to `true` for a Live Read upload to be initiated, while `x-bz-active-read-part-size` may be set to the
-part size that will be used.  If `x-bz-active-read-enabled` is set to `true` and `x-bz-active-read-part-size` is not
-present then the size of the first part will be used. All parts except the last one must have the same size.
+A producer client starts a Live Read upload by sending a [`CreateMultipartUpload`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) request with one or two custom HTTP parameters: `x-bz-active-read-enabled` and, optionally, `x-bz-active-read-part-size`.`x-bz-active-read-enabled` must be set to `true` for a Live Read upload to be initiated, while `x-bz-active-read-part-size` may be set to the part size that will be used.  If `x-bz-active-read-enabled` is set to `true` and `x-bz-active-read-part-size` is not present then the size of the first part will be used. All parts except the last one must have the same size.
 
-The producer client then uploads a series of parts, via [UploadPart](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html), as normal. As noted above, all parts except the last one must have the same size. Once the producer client has uploaded all of its data, it calls [CompleteMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html), again, as it usually would.
+The producer client then uploads a series of parts, via [`UploadPart`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html), as normal. As noted above, all parts except the last one must have the same size. Once the producer client has uploaded all of its data, it calls [`CompleteMultipartUpload`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html), again, as it usually would.
 
-Under the standard S3 API semantics, consumer clients must wait for the upload to be completed before they may download any data from the file. With Live Read, in contrast, consumer clients may attempt to download data from the file at any time after the upload is created. TBD... 
+Under the standard S3 API semantics, consumer clients must wait for the upload to be completed before they may download any data from the file. With Live Read, in contrast, consumer clients may attempt to download data, using [`GetObject`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) with the custom HTTP header `x-bz-active-read-enabled` set to `true`, from the file at any time after the upload is created. Consumer clients MUST include either `Range` or `PartNumber` in the `GetObject` call to specify the required portion of the file. If the client requests a range or part that does not exist, then Backblaze B2 responds with a `416 Range Not Satisfiable` error. On receiving this error, a consumer client might repeatedly retry the request, waiting for a short interval after each unsuccessful request.
+
+After the upload is completed, clients can retrieve the file using standard S3 API calls.
 
 ## What's in This Repository?
 
@@ -30,12 +30,28 @@ to write and read Live Read uploads:
   from `stdin`, it completes the upload. A signal handler ensures that pending data is uploaded if the app receives
   `SIGINT` (Ctrl+C) or `SIGTERM` (the default signal sent by the `kill` command).
 * `reader.py` reads a Live Read upload. The attempts to download the file part-by-part. If the file does not yet exist,
-  the app retries until it does. If a part is not available, the app uses [ListMultipartUploads](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html)
-  to check if the upload is still in progress. If it is, then the app retries getting the part, otherwise, the upload is
+  the app retries until it does. If a part is not available, the app uses [`ListMultipartUploads`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html)
+  to check if the upload is still in progress. If it is, then the app retries getting the part; otherwise, the upload is
   complete, and the app terminates.
 
 The apps use `boto3`'s [Event System](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html) to 
-inject the custom headers into the relevant SDK calls. 
+inject the custom headers into the relevant SDK calls. For example, in the writer:
+
+```python
+self.b2_client = boto3.client('s3')
+logger.debug("Created boto3 client")
+
+self.b2_client.meta.events.register('before-call.s3.CreateMultipartUpload', add_custom_header)
+
+...
+
+def add_custom_header(params, **_kwargs):
+  """
+  Add the Live Read custom headers to the outgoing request.
+  See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html
+  """
+  params['headers']['x-bz-live-read-enabled'] = 'true'
+```
 
 ## What Are Fragmented MP4 Streams?
 
@@ -67,11 +83,53 @@ already-uploaded parts while the file is still being written. The main constrain
 part size of 5 MB. For our 1080p 30 fps example, this means that there is a minimum latency of about six seconds between
 the video data being written and it being available for download.
 
-We can use `ffmpeg` to capture video from a webcam, pipe raw video to `ffplay` for monitoring, and also pipe fMP4 video 
+The demo uses `ffmpeg` to capture video from a webcam, pipe raw video to `ffplay` for monitoring, and also pipe fMP4 video 
 to `writer.py` to be written to a Live Read file.
 
-This demo was created on a MacBook Pro with an Apple M1 Pro CPU and macOS Sonoma 14.4.1 running `ffmpeg` version 7.0. It
+This demo was created on a MacBook Pro with an Apple M1 Pro CPU and macOS Sonoma 14.4.1 running Python 3.11.5 and `ffmpeg` version 7.0. It
 should also run on Linux if you change the input device and URL appropriately.
+
+### Create a Backblaze B2 Account, Bucket and Application Key
+
+TBD
+
+### Download the Source Code
+
+```shell
+git clone git@github.com:backblaze-b2-samples/live-read-demo.git
+cd live-read-demo
+```
+
+### Create a Python Virtual Environment
+
+Virtual environments allow you to encapsulate a project's dependencies; we recommend that you create a virtual environment thus:
+
+```shell
+python -m venv .venv
+```
+
+You must then activate the virtual environment before installing dependencies:
+
+```shell
+source .venv/bin/activate
+```
+
+You will need to reactivate the virtual environment, with the same command, if you close your Terminal window and return to the demo later. Both the producer and consumer apps use the same dependencies and can share the same virtual environment. If you are running the two apps in separate Terminal windows, remember to activate the virtual environment in the second window before you run the app!
+
+### Install Python Dependencies
+
+```shell
+pip install -r requirements.txt
+```
+
+### Install FFmpeg
+
+If you do not already have `ffmpeg` installed on your system, you can download it from one of the links at https://ffmpeg.org/download.html
+or use a package manager to install it. For example, using [Homebrew](https://brew.sh/) on a Mac:
+
+```shell
+brew install ffmpeg
+```
 
 ### Create a Named Pipe
 
@@ -79,6 +137,24 @@ Since we want `ffmpeg` to write two streams, we create a named pipe ('fifo') for
 
 ```shell
 mkfifo raw_video_fifo
+```
+
+### Configure the Demo Apps
+
+The demo apps read their configuration from a `.env` file. Copy the included `.env.template` to `.env`:
+
+```shell
+cp .env.template .env
+```
+
+Now edit `.env`, pasting in your application key, its ID, bucket name, and endpoint:
+
+```dotenv
+# Copy this file to .env then edit the following values
+AWS_ACCESS_KEY_ID='<Your Backblaze application key ID>'
+AWS_SECRET_ACCESS_KEY='<Your Backblaze application key>'
+AWS_ENDPOINT_URL='<Your bucket endpoint, prefixed with https://, for example, https://s3.us-west-004.backblazeb2.com>'
+BUCKET_NAME='<Your Backblaze B2 bucket name>'
 ```
 
 ### Capture Video and Pipe it to the Writer
@@ -93,7 +169,7 @@ ffplay -vf "drawtext=text='%{pts\:hms}':fontsize=72:box=1:x=(w-tw)/2:y=h-(2*lh)"
 ffmpeg -f avfoundation -video_size 1920x1080 -r 30 -pix_fmt uyvy422 -probesize 10000000 -i "0:0" \
        -f rawvideo raw_video_fifo -y \
        -f mp4 -vcodec libx264 -g 60 -movflags empty_moov+frag_keyframe - | \
-python writer.py my-bucket myfile.mp4 --debug
+python writer.py myfile.mp4 --debug
 ```
 
 Picking apart the `ffmpeg` command line:
@@ -101,10 +177,12 @@ Picking apart the `ffmpeg` command line:
 ```shell
 ffmpeg -f avfoundation -video_size 1920x1080 -r 30 -pix_fmt uyvy422 -probesize 10000000 -i "0:0" \
 ```
-* `ffmpeg` is reading video and audio data from AVFoundation input devices 0 and 0 respectively. On my MacBook Pro, these
+* `ffmpeg` is reading video and audio data from [AVFoundation](https://developer.apple.com/av-foundation/) input devices `0` and `0` respectively. On my MacBook Pro, these
   are the built-in FaceTime HD camera and MacBook Pro microphone. Video data is captured with 1920x1080 resolution (1080p)
   at 30 fps, using the `uyvy422` pixel format. `ffmpeg` will analyze the first 10 MB of data to get stream information
-  (omitting this option results in a warning: `not enough frames to estimate rate; consider increasing probesize`)
+  (omitting this option results in a warning: `not enough frames to estimate rate; consider increasing probesize`).
+
+  > On a Mac, you can list the available video and audio devices with `ffmpeg -f avfoundation -list_devices true -i ""`. 
 
 ```shell
        -f rawvideo raw_video_fifo -y \
@@ -141,29 +219,25 @@ DEBUG:writer.py:Uploaded part number 1; ETag is "7c223b579b7da8dd1b433d6eb2d0f14
 _In practice, the debug output from `ffmpeg` and `writer.py` is interleaved. I've removed `ffmpeg`'s debug output for 
 clarity._
 
-Once the first part has been uploaded, you can monitor the total size of the uploaded parts:
+Once the first part has been uploaded, you can use the included `watch_upload.sh` script in a second Terminal window to monitor the total size of the uploaded parts:
 
 ```shell
-#! /bin/bash
-
-UPLOAD_ID="null"
-until [ $UPLOAD_ID != "null" ]
-do
-    UPLOAD_ID=$(aws s3api list-multipart-uploads --bucket my-bucket --key-marker myfile.mp4 --max-uploads 1 \
-        | jq -r '.Uploads[0].UploadId')
-    sleep 1
-    echo -n "."
-done
-watch -n 1 "aws s3api list-parts --bucket my-bucket --key myfile.mp4 --upload-id ${UPLOAD_ID} | jq '[.Parts[].Size] | add'"
+./watch_upload.sh my-bucket myfile.mp4
 ```
 
 ### Start the Reader, Piping Its Output to the Display
 
-Start `reader.py` in a second Terminal window, piping its output to `ffplay`. Note the `-` argument - this tells 
+Open another Terminal window in the same directory and activate the virtual environment:
+
+```shell
+source .venv/bin/activate
+```
+
+Start `reader.py`, piping its output to `ffplay`. Note the `-` argument - this tells 
 `ffplay` to read `stdin`:
 
 ```shell
-python reader.py my-bucket myfile.mp4 --debug \
+python reader.py myfile.mp4 --debug \
     | ffplay -vf "drawtext=text='%{pts\:hms}':fontsize=72:box=1:x=(w-tw)/2:y=h-(2*lh)" -
 ```
 

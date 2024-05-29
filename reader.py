@@ -20,8 +20,7 @@ DEFAULT_QUEUE_SIZE = 4
 
 def parse_command_line_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Copy stdin to a Backblaze B2 Live Read file')
-    parser.add_argument('bucket', type=str, help='a bucket name')
-    parser.add_argument('key', type=str, help='object key')
+    parser.add_argument('key', type=str, help='object key (filename)')
     parser.add_argument('--poll-interval', type=int, required=False, default=1, help='poll interval')
     parser.add_argument('--chunk-size', type=int, required=False, default=DEFAULT_CHUNK_SIZE, help='chunk size')
     parser.add_argument('--debug', action='store_true', help='debug logging')
@@ -49,7 +48,7 @@ def main():
     else:
         logger.warning("No environment variables in .env")
 
-    downloader = LiveReadDownloader(args.bucket, args.key, args.poll_interval, args.chunk_size, args.queue_size)
+    downloader = LiveReadDownloader(os.environ['BUCKET_NAME'], args.key, args.poll_interval, args.chunk_size, args.queue_size)
     downloader.start()
 
     logger.debug('###')

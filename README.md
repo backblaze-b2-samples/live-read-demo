@@ -4,7 +4,7 @@ Backblaze B2's Live Read feature allows clients to read multipart uploads before
 flexibility of uploading a stream of data as multiple files with the manageability of keeping the stream in a single
 file. This is particularly useful in working with live video streams using formats such as Fragmented MP4.
 
-Backblaze B2 Live Read is currently in private preview. [Click here](https://www.surveymonkey.com/r/PY7CR35) to join the preview.
+Backblaze B2 Live Read is currently in private preview. Read the [announcement blog post](https://www.backblaze.com/blog/announcing-b2-live-read/); [click here](https://www.surveymonkey.com/r/PY7CR35) to join the preview.
 
 This short video explains how Live Read works and shows it in action:
 

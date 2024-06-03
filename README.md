@@ -4,11 +4,11 @@ Backblaze B2's Live Read feature allows clients to read multipart uploads before
 flexibility of uploading a stream of data as multiple files with the manageability of keeping the stream in a single
 file. This is particularly useful in working with live video streams using formats such as Fragmented MP4.
 
-[TBD - how to get access to Live Read.]
+Backblaze B2 Live Read is currently in private preview. [Click here](https://www.surveymonkey.com/r/PY7CR35) to join the preview.
 
 This short video explains how Live Read works and shows it in action:
 
-[![Live Read Video on YouTube](https://img.youtube.com/vi/JTI2kkysRWE/mqdefault.jpg)](https://www.youtube.com/watch?v=JTI2kkysRWE)
+[![Live Read Video on YouTube](youtube_preview.png)](https://www.youtube.com/watch?v=JTI2kkysRWE)
 
 ## How Does Live Read Work?
 
@@ -29,10 +29,9 @@ to write and read Live Read uploads:
   which defaults to the minimum part size, 5 MB. Each chunk is uploaded as a part. When the app receives end-of-file 
   from `stdin`, it completes the upload. A signal handler ensures that pending data is uploaded if the app receives
   `SIGINT` (Ctrl+C) or `SIGTERM` (the default signal sent by the `kill` command).
-* `reader.py` reads a Live Read upload. The attempts to download the file part-by-part. If the file does not yet exist,
+* `reader.py` reads a Live Read upload. The app attempts to download the file part-by-part. If the file does not yet exist,
   the app retries until it does. If a part is not available, the app uses [`ListMultipartUploads`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html)
-  to check if the upload is still in progress. If it is, then the app retries getting the part; otherwise, the upload is
-  complete, and the app terminates.
+  to check if the upload is still in progress. If it is, then the app retries getting the part; otherwise, the app terminates, since the upload has been completed.
 
 The apps use `boto3`'s [Event System](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html) to 
 inject the custom headers into the relevant SDK calls. For example, in the writer:
@@ -55,12 +54,12 @@ def add_custom_header(params, **_kwargs):
 
 ## What Are Fragmented MP4 Streams?
 
-MP4 video _files_ typically begin or end with metadata describing the video data - its duration, resolution, codec, etc. -
+MP4 video _files_ typically begin or end with metadata describing the video data - its duration, resolution, codec, etc. This metadata is
 known as the `MOOV` atom. The default placement is at the end of the file, as the metadata is not available until the
 video data has been rendered. Video files intended for [progressive download](https://www.backblaze.com/blog/roll-camera-streaming-media-from-backblaze-b2/)
 use an optimization known as "fast start", where the rendering app leaves space for the metadata at the beginning of the
 file, writes the video data, then overwrites the placeholder with the actual metadata. This optimization allows media
-viewers to start playing the video as it is downloaded.
+viewers to start playing the video while it is being downloaded.
 
 MP4 video _streams_, in contrast, typically comprise a metadata header containing information such as track and sample 
 descriptions, followed by a series of 'fragments' of video data, each containing its own 
@@ -91,7 +90,13 @@ should also run on Linux if you change the input device and URL appropriately.
 
 ### Create a Backblaze B2 Account, Bucket and Application Key
 
-TBD
+Follow these instructions, as necessary:
+
+* [Create a Backblaze B2 Account](https://www.backblaze.com/sign-up/cloud-storage).
+* [Create a Backblaze B2 Bucket](https://www.backblaze.com/docs/cloud-storage-create-and-manage-buckets).
+* [Create an Application Key](https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys#create-an-app-key) with access to the bucket you wish to use.
+
+Be sure to copy the application key as soon as you create it, as you will not be able to retrieve it later!
 
 ### Download the Source Code
 
@@ -133,7 +138,7 @@ brew install ffmpeg
 
 ### Create a Named Pipe
 
-Since we want `ffmpeg` to write two streams, we create a named pipe ('fifo') for it to send the raw video stream to `ffplay`:
+Since we want `ffmpeg` to write two streams, we create a [named pipe](https://en.wikipedia.org/wiki/Named_pipe) ('fifo') for it to send the raw video stream to `ffplay`:
 
 ```shell
 mkfifo raw_video_fifo
@@ -203,7 +208,7 @@ ffplay -vf "drawtext=text='%{pts\:hms}':fontsize=72:box=1:x=(w-tw)/2:y=h-(2*lh)"
 ```
 
 The `ffplay` command line shows a timestamp on the display and specifies the video format, resolution, frame rate and 
-pixel format, since none of this information is in the stream.
+pixel format, since none of this information is in the raw video stream.
 
 After a few seconds, the `ffplay` window appears, showing the live camera feed.
 
@@ -233,7 +238,7 @@ Open another Terminal window in the same directory and activate the virtual envi
 source .venv/bin/activate
 ```
 
-Start `reader.py`, piping its output to `ffplay`. Note the `-` argument - this tells 
+Start `reader.py`, piping its output to `ffplay`. Note the `-` argument at the end - this tells 
 `ffplay` to read `stdin`:
 
 ```shell
@@ -251,7 +256,7 @@ DEBUG:reader.py:Getting part number 1
 DEBUG:reader.py:Got part number 1 with size 5242880
 ```
 
-After a few seconds, a second `ffplay` window appears, showing the video read from the Live Read file.
+After a few seconds, a second `ffplay` window appears, showing the video data that was read from the Live Read file.
 
 You can leave the demo running as long as you like. The writer will continue uploading parts, and the reader will 
 continue downloading them.
@@ -283,6 +288,7 @@ The uploaded video data is stored as a single file, and can be accessed in the u
 ```console
 % aws s3 ls --human-readable s3://my-bucket/myfile.mp4
 2024-05-15 12:15:50   14.9 MiB myfile.mp4
+
 % ffprobe -hide_banner -i https://s3.us-west-004.backblazeb2.com/my-bucket/myfile.mp4
 Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'https://s3.us-west-004.backblazeb2.com/my-bucket/myfile.mp4':
   Metadata:

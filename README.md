@@ -8,7 +8,7 @@ Backblaze B2 Live Read is currently in private preview. [Click here](https://www
 
 This short video explains how Live Read works and shows it in action:
 
-[![Live Read Video on YouTube](youtube_preview.png)](https://www.youtube.com/watch?v=JTI2kkysRWE)
+[![Live Read Video on YouTube](youtube_preview.jpg)](https://www.youtube.com/watch?v=JTI2kkysRWE)
 
 ## How Does Live Read Work?
 

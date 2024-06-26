@@ -8,7 +8,7 @@ Backblaze B2 Live Read is currently in private preview. Read the [announcement b
 
 This webinar explains how Live Read works and shows it in action, using OBS Studio to generate a live video stream.
 
-[![Live Read Webinar on YouTube](dummy.jpg)](https://www.youtube.com/watch?v=JTI2kkysRWE)
+[![Live Read Webinar on YouTube](https://github.com/backblaze-b2-samples/live-read-demo/assets/723517/6daa897f-0f6d-4ffe-8668-4cc2379620d9)](https://www.youtube.com/watch?v=4GQUWo2wHUQ)
 
 [This short video](https://www.youtube.com/watch?v=JTI2kkysRWE) shows a simpler version of the demo, using FFmpeg to capture video from a webcam.
 
@@ -251,7 +251,7 @@ python writer.py myfile.mp4 --debug
 
 Start OBS Studio, navigate to the **Settings** page, and click **Stream** on the left. Set **Service** to 'Custom', **Server** to `rtmp://localhost/app/` and **Stream Key** to `streamkey`. (You can change `app` and `streamkey` in the FFmpeg command and OBS Studio configuration, but both values must be present).
 
-![OBS Studio Settings](dummy.jpg)
+![OBS Studio Settings](https://github.com/backblaze-b2-samples/live-read-demo/assets/723517/fd65496d-0213-415d-8b60-4aca7a5b2715)
 
 Start streaming in OBS Studio. As above, `writer.py` creates a Live Read upload then, every few seconds, uploads a part to Backblaze B2.
 
@@ -306,7 +306,7 @@ rclone mount b2://my-bucket ./out --vfs-cache-mode writes --vfs-write-back 1s
 
 Upload `index.html` to the same location as the HLS data. Open `https://<your-bucket-name>.<your-bucket-endpoint>/index.html` (for example, `https://my-bucket.s3.us-west-004.backblazeb2.com`) in a browser. You should see the live stream:
 
-
+![Live Read_Stream](https://github.com/backblaze-b2-samples/live-read-demo/assets/723517/e32ba24c-b7af-49eb-90c1-bdd85fcae447)
 
 ### Terminating the demo
 

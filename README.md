@@ -6,9 +6,11 @@ file. This is particularly useful in working with live video streams using forma
 
 Backblaze B2 Live Read is currently in private preview. Read the [announcement blog post](https://www.backblaze.com/blog/announcing-b2-live-read/); [click here](https://www.surveymonkey.com/r/PY7CR35) to join the preview.
 
-This short video explains how Live Read works and shows it in action:
+This webinar explains how Live Read works and shows it in action, using OBS Studio to generate a live video stream.
 
-[![Live Read Video on YouTube](youtube_preview.jpg)](https://www.youtube.com/watch?v=JTI2kkysRWE)
+[![Live Read Webinar on YouTube](dummy.jpg)](https://www.youtube.com/watch?v=JTI2kkysRWE)
+
+[This short video](https://www.youtube.com/watch?v=JTI2kkysRWE) shows a simpler version of the demo, using FFmpeg to capture video from a webcam.
 
 ## How Does Live Read Work?
 
@@ -82,10 +84,15 @@ already-uploaded parts while the file is still being written. The main constrain
 part size of 5 MB. For our 1080p 30 fps example, this means that there is a minimum latency of about six seconds between
 the video data being written and it being available for download.
 
-The demo uses `ffmpeg` to capture video from a webcam, pipe raw video to `ffplay` for monitoring, and also pipe fMP4 video 
-to `writer.py` to be written to a Live Read file.
+The demo instructions below include:
 
-This demo was created on a MacBook Pro with an Apple M1 Pro CPU and macOS Sonoma 14.4.1 running Python 3.11.5 and `ffmpeg` version 7.0. It
+* Using FFmpeg to capture video from a webcam or RTMP stream.
+* Piping raw video to `ffplay` for monitoring.
+* Piping fMP4 video to `writer.py` to be written to a Live Read file.
+* Using `reader.py` to play back video from a Live Read file.
+* Piping fMP4 video to FFmpeg for conversion to HTTP Live Streaming (HLS) format. 
+
+This demo was created on a MacBook Pro with an Apple M1 Pro CPU and macOS Sonoma 14.4.1 running Python 3.11.5 and FFmpeg version 7.0. It
 should also run on Linux if you change the input device and URL appropriately.
 
 ### Create a Backblaze B2 Account, Bucket and Application Key
@@ -129,7 +136,7 @@ pip install -r requirements.txt
 
 ### Install FFmpeg
 
-If you do not already have `ffmpeg` installed on your system, you can download it from one of the links at https://ffmpeg.org/download.html
+If you do not already have FFmpeg installed on your system, you can download it from one of the links at https://ffmpeg.org/download.html
 or use a package manager to install it. For example, using [Homebrew](https://brew.sh/) on a Mac:
 
 ```shell
@@ -138,7 +145,7 @@ brew install ffmpeg
 
 ### Create a Named Pipe
 
-Since we want `ffmpeg` to write two streams, we create a [named pipe](https://en.wikipedia.org/wiki/Named_pipe) ('fifo') for it to send the raw video stream to `ffplay`:
+Since we want FFmpeg to write two streams, we create a [named pipe](https://en.wikipedia.org/wiki/Named_pipe) ('fifo') for it to send the raw video stream to `ffplay`:
 
 ```shell
 mkfifo raw_video_fifo
@@ -164,8 +171,8 @@ BUCKET_NAME='<Your Backblaze B2 bucket name>'
 
 ### Capture Video and Pipe it to the Writer
 
-Now we can start `ffplay` in the background, reading the fifo, and `ffmpeg` in the foreground, writing raw video to the
-fifo and fMP4 to its standard output. We pipe the standard output into `writer.py`, giving it a B2 bucket name and key.
+Now we can start FFplay in the background, reading the fifo, and FFmpeg in the foreground, writing raw video to the
+fifo and fMP4 to its standard output. We pipe the standard output into `writer.py`, giving it a B2 key.
 The `--debug` flag provides some useful insight into its operation.
 
 ```shell
@@ -177,14 +184,14 @@ ffmpeg -f avfoundation -video_size 1920x1080 -r 30 -pix_fmt uyvy422 -probesize 1
 python writer.py myfile.mp4 --debug
 ```
 
-Picking apart the `ffmpeg` command line:
+Picking apart the FFmpeg command line:
 
 ```shell
 ffmpeg -f avfoundation -video_size 1920x1080 -r 30 -pix_fmt uyvy422 -probesize 10000000 -i "0:0" \
 ```
-* `ffmpeg` is reading video and audio data from [AVFoundation](https://developer.apple.com/av-foundation/) input devices `0` and `0` respectively. On my MacBook Pro, these
+* FFmpeg is reading video and audio data from [AVFoundation](https://developer.apple.com/av-foundation/) input devices `0` and `0` respectively. On my MacBook Pro, these
   are the built-in FaceTime HD camera and MacBook Pro microphone. Video data is captured with 1920x1080 resolution (1080p)
-  at 30 fps, using the `uyvy422` pixel format. `ffmpeg` will analyze the first 10 MB of data to get stream information
+  at 30 fps, using the `uyvy422` pixel format. FFmpeg will analyze the first 10 MB of data to get stream information
   (omitting this option results in a warning: `not enough frames to estimate rate; consider increasing probesize`).
 
   > On a Mac, you can list the available video and audio devices with `ffmpeg -f avfoundation -list_devices true -i ""`. 
@@ -198,7 +205,7 @@ ffmpeg -f avfoundation -video_size 1920x1080 -r 30 -pix_fmt uyvy422 -probesize 1
 ```shell
        -f mp4 -vcodec libx264 -g 60 -movflags empty_moov+frag_keyframe - | \
 ```
-* A second stream is encoded as MP4 using the H.264 codec and sent to `stdout`. `ffmpeg` writes an empty `moov` 
+* A second stream is encoded as MP4 using the H.264 codec and sent to `stdout`. FFmpeg writes an empty `moov` 
   atom at the start of the stream, then sends fragments of up to 60 frames (two seconds), with a key frame at the start
   of each fragment.
 
@@ -221,7 +228,7 @@ DEBUG:writer.py:Uploading part number 1 with size 52428800
 DEBUG:writer.py:Uploaded part number 1; ETag is "7c223b579b7da8dd1b433d6eb2d0f141"    
 ```
 
-_In practice, the debug output from `ffmpeg` and `writer.py` is interleaved. I've removed `ffmpeg`'s debug output for 
+_In practice, the debug output from FFmpeg and `writer.py` is interleaved. I've removed FFmpeg's debug output for 
 clarity._
 
 Once the first part has been uploaded, you can use the included `watch_upload.sh` script in a second Terminal window to monitor the total size of the uploaded parts:
@@ -229,6 +236,24 @@ Once the first part has been uploaded, you can use the included `watch_upload.sh
 ```shell
 ./watch_upload.sh my-bucket myfile.mp4
 ```
+
+### Receive an RTMP Stream and Pipe it to the Writer
+
+As an alternative to using FFmpeg to capture video directly from the webcam, you can use [OBS Studio](https://obsproject.com/) to generate a [Real-Time Messaging Protocol (RTMP)](https://en.wikipedia.org/wiki/Real-Time_Messaging_Protocol) stream.
+
+Start FFmpeg, listening as an RTMP server, receiving Flash Video-formatted (FLV) data, and piping its output to the writer app:
+
+```shell
+ffmpeg -listen 1 -f flv -i rtmp://localhost/app/streamkey \
+    -f mp4 -g 60 -movflags empty_moov+frag_keyframe - | \
+python writer.py myfile.mp4 --debug
+```
+
+Start OBS Studio, navigate to the **Settings** page, and click **Stream** on the left. Set **Service** to 'Custom', **Server** to `rtmp://localhost/app/` and **Stream Key** to `streamkey`. (You can change `app` and `streamkey` in the FFmpeg command and OBS Studio configuration, but both values must be present).
+
+![OBS Studio Settings](dummy.jpg)
+
+Start streaming in OBS Studio. As above, `writer.py` creates a Live Read upload then, every few seconds, uploads a part to Backblaze B2.
 
 ### Start the Reader, Piping Its Output to the Display
 
@@ -261,9 +286,31 @@ After a few seconds, a second `ffplay` window appears, showing the video data th
 You can leave the demo running as long as you like. The writer will continue uploading parts, and the reader will 
 continue downloading them.
 
+### Pipe fMP4 video to FFmpeg for conversion to HTTP Live Streaming (HLS) format
+
+You can use `reader.py` with FFmpeg to create HLS-formatted video data:
+
+```shell
+python reader.py stream.mp4 --debug |
+ffmpeg -i - \
+    -flags +cgop -hls_time 4 -hls_playlist_type event out/stream.m3u8
+```
+
+In this example, FFmpeg writes the HLS manifest to a file named `stream.m3u8` in the `out` directory, writing video data in 4 second segments (`-hls_time 4`) to the same directory.
+
+You can use `rclone mount` to write the HLS data to a Backblaze B2 Bucket (you can use the same bucket as the Live Read file, or a different bucket altogether):
+
+```shell
+rclone mount b2://my-bucket ./out --vfs-cache-mode writes --vfs-write-back 1s
+```
+
+Upload `index.html` to the same location as the HLS data. Open `https://<your-bucket-name>.<your-bucket-endpoint>/index.html` (for example, `https://my-bucket.s3.us-west-004.backblazeb2.com`) in a browser. You should see the live stream:
+
+
+
 ### Terminating the demo
 
-When you terminate `ffmpeg` and `writer.py` via Ctrl+C, the writer uploads any remaining data in its `stdin` buffer and
+When you terminate FFmpeg and `writer.py` via Ctrl+C, the writer uploads any remaining data in its `stdin` buffer and
 completes the multipart upload:
 
 ```text
@@ -307,6 +354,27 @@ Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'https://s3.us-west-004.backblazeb2.com/
         handler_name    : SoundHandler
         vendor_id       : [0][0][0][0]
 ```
+
+### Converting the HLS Data from a Live Event to Video On Demand
+
+If you ran the FFmpeg command to create HLS data then, after you close the applications, you can edit the HLS manifest file to change the stream from a live event to video on demand (VOD):
+
+* Download `stream.m3u8`.
+* Open it in an editor.
+* Change the line
+  ```text
+  #EXT-X-PLAYLIST-TYPE:EVENT
+  ```
+  to
+  ```text
+  #EXT-X-PLAYLIST-TYPE:VOD
+  ```
+* Append the following line to the file:
+  ```text
+  #EXT-X-ENDLIST
+  ```
+
+Now, when you open the stream in a browser, you will be able to view the recording from its start.
 
 ## How Do I Apply Live Read to Other Use Cases?
 

@@ -7,7 +7,6 @@ from queue import Queue
 from threading import Thread
 
 import boto3
-from botocore.response import StreamingBody
 from botocore.exceptions import ClientError, ResponseStreamingError
 
 logger = logging.getLogger('downloader')
@@ -18,8 +17,9 @@ class LiveReadDownloader(Thread):
     LiveReadDownloader encapsulates all the logic associated with a Live Read download.
     """
 
-    def __init__(self, bucket: str, key: str, poll_interval: int, chunk_size: int, queue_size: int):
-        super().__init__()
+    def __init__(self, bucket: str, key: str, poll_interval: int, chunk_size: int, queue_size: int, no_wait: bool):
+        # Make this a daemon thread, so it is stopped when the foreground thread ends
+        super().__init__(daemon=True)
         """
         Initialize a new LiveReadUploader
         """
@@ -32,6 +32,7 @@ class LiveReadDownloader(Thread):
         self._key = key
         self._poll_interval = poll_interval
         self._chunk_size = chunk_size
+        self._no_wait = no_wait
 
         # Create a boto3 client based on configuration in .env file
         # AWS_ACCESS_KEY_ID=<Your Backblaze Application Key ID>
@@ -55,6 +56,7 @@ class LiveReadDownloader(Thread):
             self._buffer_queue.put(data)
 
         logger.info("Finished multipart download")
+        self._buffer_queue.put(None)
 
     def get_data(self, block=True) -> bytes:
         """
@@ -71,12 +73,19 @@ class LiveReadDownloader(Thread):
             try:
                 if self._polling_offset != self._offset:
                     logger.debug('Getting range %s', byte_range)
-                response = self.b2_client.get_object(
-                    Bucket=self._bucket,
-                    Key=self._key,
-                    VersionId=self._upload_id,
-                    Range=byte_range
-                )
+                if self._upload_id:
+                    response = self.b2_client.get_object(
+                        Bucket=self._bucket,
+                        Key=self._key,
+                        VersionId=self._upload_id,
+                        Range=byte_range
+                    )
+                else:
+                    response = self.b2_client.get_object(
+                        Bucket=self._bucket,
+                        Key=self._key,
+                        Range=byte_range
+                    )
                 bytes_read = response['ContentLength']
                 logger.debug('Got range %s with size %s', byte_range, bytes_read)
                 self._offset += bytes_read
@@ -94,7 +103,7 @@ class LiveReadDownloader(Thread):
                             self._polling_offset = self._offset
                     else:
                         # Upload has finished - we're done
-                        logger.debug("Upload is complete.")
+                        logger.debug(f"Download is complete. Downloaded {self._offset} bytes")
                         return None
                 elif e.response['ResponseMetadata']['HTTPStatusCode'] == http.HTTPStatus.NOT_FOUND:
                     # Keep trying until the parts become available
@@ -119,7 +128,7 @@ class LiveReadDownloader(Thread):
                 KeyMarker=self._key,
                 MaxUploads=1
             )
-            if 'Uploads' in response:
+            if 'Uploads' in response or self._no_wait:
                 break
 
             if not logged:
@@ -130,9 +139,13 @@ class LiveReadDownloader(Thread):
 
         # The last entry in the list is the most recent upload
         # The UploadId is the same as the file's VersionId
-        self._upload_id = response['Uploads'][len(response['Uploads']) - 1]['UploadId']
+        self._upload_id = response['Uploads'][len(response['Uploads']) - 1]['UploadId'] \
+            if 'Uploads' in response else None
 
     def _is_upload_in_progress(self):
+        if self._no_wait:
+            return False
+
         response = self.b2_client.list_multipart_uploads(
             Bucket=self._bucket,
             KeyMarker=self._key,

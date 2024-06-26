@@ -1,6 +1,6 @@
 # Backblaze B2 Live Read Demo
 
-Backblaze B2's Live Read feature allows clients to read multipart uploads before they are complete, providing the
+Backblaze B2's Live Read feature allows clients to read multipart uploads before they are complete, combining the
 flexibility of uploading a stream of data as multiple files with the manageability of keeping the stream in a single
 file. This is particularly useful in working with live video streams using formats such as Fragmented MP4.
 
@@ -117,7 +117,7 @@ cd live-read-demo
 Virtual environments allow you to encapsulate a project's dependencies; we recommend that you create a virtual environment thus:
 
 ```shell
-python -m venv .venv
+python3 -m venv .venv
 ```
 
 You must then activate the virtual environment before installing dependencies:
@@ -251,9 +251,23 @@ python writer.py myfile.mp4 --debug
 
 Start OBS Studio, navigate to the **Settings** page, and click **Stream** on the left. Set **Service** to 'Custom', **Server** to `rtmp://localhost/app/` and **Stream Key** to `streamkey`. (You can change `app` and `streamkey` in the FFmpeg command and OBS Studio configuration, but both values must be present).
 
-![OBS Studio Settings](https://github.com/backblaze-b2-samples/live-read-demo/assets/723517/fd65496d-0213-415d-8b60-4aca7a5b2715)
+![OBS Studio Stream Settings](https://github.com/backblaze-b2-samples/live-read-demo/assets/723517/fd65496d-0213-415d-8b60-4aca7a5b2715)
 
 Start streaming in OBS Studio. As above, `writer.py` creates a Live Read upload then, every few seconds, uploads a part to Backblaze B2.
+
+### Tail Follow a Local File and Pipe it to the Writer
+
+As another alternative, you can have the writer read data from a local file, in the manner of `tail -f`, and upload it to B2 via Live Read:
+
+```shell
+python writer.py myfile.mp4 /path/to/local/file.mp4 --debug
+```
+
+You can use OBS Studio to write a suitable file - navigate to the **Settings** page, and click **Output** on the left. Set **Recording Path** to an appropriate location, and set **Recording Format** to 'Fragmented MP4 (.mp4)'.
+
+![OBS Studio Output Settings](https://github.com/backblaze-b2-samples/live-read-demo/assets/723517/470218a6-6b9e-434e-b0cb-85b7dad040f1)
+
+Start recording in OBS Studio. As above, `writer.py` creates a Live Read upload then, every few seconds, uploads a part to Backblaze B2.
 
 ### Start the Reader, Piping Its Output to the Display
 
@@ -293,15 +307,15 @@ You can use `reader.py` with FFmpeg to create HLS-formatted video data:
 ```shell
 python reader.py stream.mp4 --debug |
 ffmpeg -i - \
-    -flags +cgop -hls_time 4 -hls_playlist_type event out/stream.m3u8
+    -flags +cgop -hls_time 4 -hls_playlist_type event hls/stream.m3u8
 ```
 
-In this example, FFmpeg writes the HLS manifest to a file named `stream.m3u8` in the `out` directory, writing video data in 4 second segments (`-hls_time 4`) to the same directory.
+In this example, FFmpeg writes the HLS manifest to a file named `stream.m3u8` in the `hls` directory, writing video data in 4 second segments (`-hls_time 4`) to the same directory.
 
 You can use `rclone mount` to write the HLS data to a Backblaze B2 Bucket (you can use the same bucket as the Live Read file, or a different bucket altogether):
 
 ```shell
-rclone mount b2://my-bucket ./out --vfs-cache-mode writes --vfs-write-back 1s
+rclone mount b2://my-bucket/hls ./hls --vfs-cache-mode writes --vfs-write-back 1s
 ```
 
 Upload `index.html` to the same location as the HLS data. Open `https://<your-bucket-name>.<your-bucket-endpoint>/index.html` (for example, `https://my-bucket.s3.us-west-004.backblazeb2.com`) in a browser. You should see the live stream:

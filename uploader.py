@@ -59,6 +59,7 @@ class LiveReadUploader(Thread):
         self.upload_id: str | None = None
         self.bucket = bucket
         self.key = key
+        self.bytes_written = 0
 
         # Create a boto3 client based on configuration in .env file
         # AWS_ACCESS_KEY_ID=<Your Backblaze Application Key ID>
@@ -80,7 +81,7 @@ class LiveReadUploader(Thread):
             if done:
                 break
 
-        logger.info("Finished multipart upload")
+        logger.info(f"Finished multipart upload. Uploaded {self.bytes_written} bytes")
 
     def put(self, task: LiveReadTask):
         """
@@ -118,6 +119,7 @@ class LiveReadUploader(Thread):
             'PartNumber': self.part_number
         })
         self.part_number += 1
+        self.bytes_written += len(buffer)
         return False
 
     def complete_multipart_upload(self):

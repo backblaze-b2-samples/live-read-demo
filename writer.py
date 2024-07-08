@@ -22,19 +22,27 @@ DEFAULT_INTERVAL = 0.5
 
 shutdown_requested = False
 
+default_signal_handlers: dict[int, Callable[[int, FrameType | None], Any | int | signal.Handlers | None]] = {}
 
-def signal_handler(sig, _frame):
-    global shutdown_requested
 
+def signal_handler(sig: int, frame: FrameType | None) -> None:
     """
     By default, Python would raise a KeyboardInterrupt on SIGINT and terminate the program on SIGTERM. We want to
     finish processing any buffered input from stdin, at which point read_stdin_stream will return, and we will
-    complete the multipart upload. So, we don't need to do anything here other than log the fact that we caught
-    the signal.
+    complete the multipart upload. However, we still need to let the user stop the app if necessary by sending the
+    signal again.
     """
-    logger.info('Caught signal %s. Processing remaining data.', signal.Signals(sig).name)
-    # Stop reading data in the main loop
-    shutdown_requested = True
+    global shutdown_requested
+
+    if shutdown_requested:
+        logger.info('Caught signal %s while processing remaining data. Terminating immediately.', signal.Signals(sig).name)
+        return default_signal_handlers[sig](sig, frame)
+    else:
+        logger.info('Caught signal %s. Processing remaining data.', signal.Signals(sig).name)
+        message = 'Press Control-C' if sig == signal.SIGINT else 'Terminate the app'
+        logger.info(f'{message} again to terminate immediately.')
+        # Stop reading data in the main loop
+        shutdown_requested = True
 
 
 def parse_command_line_args() -> argparse.Namespace:
@@ -86,8 +94,8 @@ def main() -> None:
     load_env_vars()
 
     # # Install handler to override the KeyboardInterrupt on SIGINT or SIGTERM
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    for sig in [signal.SIGINT, signal.SIGTERM]:
+        default_signal_handlers[sig] = signal.signal(signal.SIGINT, signal_handler)
 
     uploader = LiveReadUploader(os.environ['BUCKET_NAME'], args.key)
     uploader.start()

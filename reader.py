@@ -3,13 +3,12 @@ import logging
 import os
 import sys
 
-from dotenv import load_dotenv
-
+from common import init_logging, load_env_vars
 from downloader import LiveReadDownloader
 
 logging.basicConfig()
 
-logger = logging.getLogger(os.path.basename(__file__))
+logger = logging.getLogger(__name__)
 
 # Default to minimum part size
 DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024
@@ -32,31 +31,24 @@ def parse_command_line_args() -> argparse.Namespace:
     return args
 
 
-# noinspection DuplicatedCode
-def main():
+def write_data_from_queue(filename: str, downloader: LiveReadDownloader):
+    with sys.stdout.buffer if not filename else open(filename, 'wb') as f:
+        while data := downloader.get_data():
+            f.write(data)
+
+
+def main() -> None:
     args = parse_command_line_args()
 
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-        logging.getLogger('downloader').setLevel(logging.DEBUG)
+    init_logging(args, [__name__, 'downloader'])
 
-    if args.debug_boto:
-        logging.getLogger('botocore').setLevel(logging.DEBUG)
-
-    logger.debug("Command-line arguments: %s", args)
-
-    if load_dotenv():
-        logger.debug("Loaded environment variables from .env")
-    else:
-        logger.warning("No environment variables in .env")
+    load_env_vars()
 
     downloader = LiveReadDownloader(os.environ['BUCKET_NAME'], args.key, args.poll_interval, args.chunk_size,
                                     args.queue_size, args.no_wait)
     downloader.start()
 
-    with sys.stdout.buffer if not args.filename else open(args.filename, 'wb') as f:
-        while data := downloader.get_data():
-            f.write(data)
+    write_data_from_queue(args.filename, downloader)
 
     logger.debug("Exiting Normally.")
 

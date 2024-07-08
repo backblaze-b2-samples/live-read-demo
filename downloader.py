@@ -10,7 +10,7 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError, ResponseStreamingError
 
-logger = logging.getLogger('downloader')
+logger = logging.getLogger(__name__)
 
 
 class LiveReadDownloader(Thread):

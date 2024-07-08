@@ -7,13 +7,12 @@ import time
 from types import FrameType
 from typing import Any, Callable
 
-from dotenv import load_dotenv
-
+from common import init_logging, load_env_vars
 from uploader import LiveReadUploader, LiveReadCreate, LiveReadUpload, LiveReadComplete
 
 logging.basicConfig()
 
-logger = logging.getLogger(os.path.basename(__file__))
+logger = logging.getLogger(__name__)
 
 # See https://www.backblaze.com/docs/cloud-storage-large-files
 MIN_CHUNK_SIZE = 5 * 1024 * 1024
@@ -82,19 +81,9 @@ def read_data_to_queue(filename: str, uploader: LiveReadUploader, chunk_size, in
 def main() -> None:
     args = parse_command_line_args()
 
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-        logging.getLogger('uploader').setLevel(logging.DEBUG)
+    init_logging(args, [__name__, 'uploader'])
 
-    if args.debug_boto:
-        logging.getLogger('botocore').setLevel(logging.DEBUG)
-
-    logger.debug("Command-line arguments: %s", args)
-
-    if load_dotenv():
-        logger.debug("Loaded environment variables from .env")
-    else:
-        logger.warning("No environment variables in .env")
+    load_env_vars()
 
     # # Install handler to override the KeyboardInterrupt on SIGINT or SIGTERM
     signal.signal(signal.SIGINT, signal_handler)

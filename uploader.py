@@ -8,7 +8,7 @@ from typing import Any
 
 import boto3
 
-logger = logging.getLogger('uploader')
+logger = logging.getLogger(__name__)
 
 
 class LiveReadTask:

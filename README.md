@@ -328,21 +328,51 @@ When you terminate FFmpeg and `writer.py` via Ctrl+C, the writer uploads any rem
 completes the multipart upload:
 
 ```text
-INFO:writer.py:Caught signal SIGINT. Processing remaining data.
-DEBUG:writer.py:Uploading part number 3 with size 5150190 
-DEBUG:writer.py:Uploaded part number 3; ETag is "9453bc700d885233d1b9f43efcf14f4d"
-DEBUG:writer.py:Completing multipart upload with 3 parts
-DEBUG:writer.py:Exiting Normally.
+INFO:__main__:Caught signal SIGINT. Processing remaining data.
+INFO:__main__:Press Control-C again to terminate immediately.
+DEBUG:uploader:Uploading part number 3 with size 4120064 
+DEBUG:uploader:Uploaded part number 3; ETag is "9453bc700d885233d1b9f43efcf14f4d"
+DEBUG:uploader:Completing multipart upload with 3 parts
+INFO:uploader:Finished multipart upload. Uploaded 14605824 bytes
+DEBUG:__main__:Exiting Normally.
 ```
 
-The reader detects that the upload is complete, and exits:
+If necessary, you can press Ctrl+C again to terminate the writer immediately:
 
 ```text
-DEBUG:reader.py:Got part number 3 with size 5150190 
-DEBUG:reader.py:Getting part number 4 
-DEBUG:reader.py:Upload is complete. 
-DEBUG:reader.py:Exiting Normally.
+INFO:__main__:Caught signal SIGINT. Processing remaining data.
+INFO:__main__:Press Control-C again to terminate immediately.
+DEBUG:uploader:Uploading part number 4 with size 4466922
+^CINFO:__main__:Caught signal SIGINT while processing remaining data. Terminating immediately.
+Traceback (most recent call last):
+  File "/Users/ppatterson/src/live_read_demo/writer.py", line 112, in <module>
+    main()
+...
 ```
+
+Note that terminating the app before the upload is completed will result in an unfinished large file remaining in your
+bucket. You can use the B2 command line to list and remove unfinished large files. Check the filename in the listing to 
+ensure that you cancel the correct unfinished large file. 
+
+```console
+% b2 file large unfinished list b2://my-bucket
+4_z51951f8973a51c7f940d0c1b_f2288a3150459f5a3_d20240703_m192256_c004_v0402019_t0001_u01720034576896 stream.mp4 binary/octet-stream
+4_z51951f8973a51c7f940d0c1b_f2021de9b7fe4d115_d20240708_m200520_c004_v0402023_t0005_u01720469120500 another_file.mp4 binary/octet-stream 
+% b2 file large unfinished cancel b2id://4_z51951f8973a51c7f940d0c1b_f2288a3150459f5a3_d20240703_m192256_c004_v0402019_t0001_u01720034576896
+4_z51951f8973a51c7f940d0c1b_f2288a3150459f5a3_d20240703_m192256_c004_v0402019_t0001_u01720034576896 canceled
+```
+
+The reader detects that it has reached the end of the data, and exits:
+
+```text
+DEBUG:downloader:Got range bytes=5242880-10485759 with size 4100572
+DEBUG:downloader:Getting range bytes=9343452-14586331
+DEBUG:downloader:Download is complete. Downloaded 9343452 bytes
+INFO:downloader:Finished multipart download
+DEBUG:__main__:Exiting Normally.
+```
+
+You can terminate the reader with Ctrl-C if you wish.
 
 The uploaded video data is stored as a single file, and can be accessed in the usual way:
 

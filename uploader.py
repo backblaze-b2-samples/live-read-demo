@@ -14,6 +14,9 @@ logger = logging.getLogger('uploader')
 class LiveReadTask:
     @abc.abstractmethod
     def execute(self, uploader: LiveReadUploader) -> bool:
+        """
+        Execute this task. Return true to terminate the run loop
+        """
         pass
 
 
@@ -22,7 +25,8 @@ class LiveReadCreate(LiveReadTask):
         return 'Create task'
 
     def execute(self, uploader: LiveReadUploader) -> bool:
-        return uploader.create_multipart_upload()
+        uploader.create_multipart_upload()
+        return False
 
 
 class LiveReadUpload(LiveReadTask):
@@ -33,7 +37,8 @@ class LiveReadUpload(LiveReadTask):
         return f'Upload task with buffer length {len(self.buffer)}'
 
     def execute(self, uploader: LiveReadUploader) -> bool:
-        return uploader.upload_part(self.buffer)
+        uploader.upload_part(self.buffer)
+        return False
 
 
 class LiveReadComplete(LiveReadTask):
@@ -41,7 +46,8 @@ class LiveReadComplete(LiveReadTask):
         return 'Complete task'
 
     def execute(self, uploader: LiveReadUploader) -> bool:
-        return uploader.complete_multipart_upload()
+        uploader.complete_multipart_upload()
+        return True
 
 
 class LiveReadUploader(Thread):
@@ -103,7 +109,6 @@ class LiveReadUploader(Thread):
         response = self.b2_client.create_multipart_upload(Bucket=self.bucket, Key=self.key)
         self.upload_id = response['UploadId']
         logger.debug("Created multipart upload. UploadId is %s", self.upload_id)
-        return False
 
     def upload_part(self, buffer: bytes) -> None:
         logger.debug("Uploading part number %s with size %s", self.part_number, len(buffer))
@@ -121,7 +126,6 @@ class LiveReadUploader(Thread):
         })
         self.part_number += 1
         self.bytes_written += len(buffer)
-        return False
 
     def complete_multipart_upload(self) -> None:
         if len(self.parts) > 0:
@@ -144,7 +148,6 @@ class LiveReadUploader(Thread):
         else:
             # This should never happen!
             raise RuntimeError("No upload to complete")
-        return True
 
 
 def add_custom_header(params: dict[str, Any], **_kwargs):

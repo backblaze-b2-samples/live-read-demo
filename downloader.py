@@ -48,7 +48,7 @@ class LiveReadDownloader(Thread):
         """
         Get the most recent upload_id for the file, then loop, putting buffers on the queue, until there is no more data
         """
-        self._get_current_upload_id()
+        self._upload_id = self._get_current_upload_id()
         logger.debug('Reading UploadId %s', self._upload_id)
 
         logger.info("Starting multipart download")
@@ -120,7 +120,7 @@ class LiveReadDownloader(Thread):
 
                 time.sleep(self._poll_interval)
 
-    def _get_current_upload_id(self):
+    def _get_current_upload_id(self) -> str:
         # Get the UploadId of the current upload. This is the file version we will get data from
         logged = False
         while True:
@@ -140,7 +140,7 @@ class LiveReadDownloader(Thread):
 
         # The last entry in the list is the most recent upload
         # The UploadId is the same as the file's VersionId
-        self._upload_id = response['Uploads'][len(response['Uploads']) - 1]['UploadId'] \
+        return response['Uploads'][len(response['Uploads']) - 1]['UploadId'] \
             if 'Uploads' in response else None
 
     def _is_upload_in_progress(self) -> bool:

@@ -4,6 +4,8 @@ import os
 import signal
 import sys
 import time
+from types import FrameType
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 
@@ -36,7 +38,7 @@ def signal_handler(sig, _frame):
     shutdown_requested = True
 
 
-def parse_command_line_args():
+def parse_command_line_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Copy a file or stdin to a Backblaze B2 Live Read file')
     parser.add_argument('key', type=str, help='object key (filename) in B2')
     parser.add_argument('filename', type=str, nargs='?', help='local input file; omit for stdin')
@@ -77,8 +79,7 @@ def read_data_to_queue(filename: str, uploader: LiveReadUploader, chunk_size, in
     uploader.put(LiveReadComplete())
 
 
-# noinspection DuplicatedCode
-def main():
+def main() -> None:
     args = parse_command_line_args()
 
     if args.debug:

@@ -5,6 +5,7 @@ import time
 
 from queue import Queue
 from threading import Thread
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError, ResponseStreamingError
@@ -43,7 +44,7 @@ class LiveReadDownloader(Thread):
 
         self.b2_client.meta.events.register('before-call.s3.GetObject', add_custom_header)
 
-    def run(self):
+    def run(self) -> None:
         """
         Get the most recent upload_id for the file, then loop, putting buffers on the queue, until there is no more data
         """
@@ -58,7 +59,7 @@ class LiveReadDownloader(Thread):
         logger.info("Finished multipart download")
         self._buffer_queue.put(None)
 
-    def get_data(self, block=True) -> bytes:
+    def get_data(self, block: bool = True) -> bytes:
         """
         Get the next chunk of data from the queue. Returns None if there are no more.
         """
@@ -142,7 +143,7 @@ class LiveReadDownloader(Thread):
         self._upload_id = response['Uploads'][len(response['Uploads']) - 1]['UploadId'] \
             if 'Uploads' in response else None
 
-    def _is_upload_in_progress(self):
+    def _is_upload_in_progress(self) -> bool:
         if self._no_wait:
             return False
 
@@ -161,7 +162,7 @@ class LiveReadDownloader(Thread):
         return found
 
 
-def add_custom_header(params, **_kwargs):
+def add_custom_header(params: dict[str, Any], **_kwargs):
     """
     Add the Live Read custom headers to the outgoing request.
     See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html

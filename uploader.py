@@ -4,6 +4,7 @@ import logging
 
 from queue import Queue
 from threading import Thread
+from typing import Any
 
 import boto3
 
@@ -17,7 +18,7 @@ class LiveReadTask:
 
 
 class LiveReadCreate(LiveReadTask):
-    def __str__(self):
+    def __str__(self) -> str:
         return 'Create task'
 
     def execute(self, uploader: LiveReadUploader) -> bool:
@@ -28,7 +29,7 @@ class LiveReadUpload(LiveReadTask):
     def __init__(self, buffer: bytes):
         self.buffer = buffer
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'Upload task with buffer length {len(self.buffer)}'
 
     def execute(self, uploader: LiveReadUploader) -> bool:
@@ -36,7 +37,7 @@ class LiveReadUpload(LiveReadTask):
 
 
 class LiveReadComplete(LiveReadTask):
-    def __str__(self):
+    def __str__(self) -> str:
         return 'Complete task'
 
     def execute(self, uploader: LiveReadUploader) -> bool:
@@ -70,7 +71,7 @@ class LiveReadUploader(Thread):
 
         self.b2_client.meta.events.register('before-call.s3.CreateMultipartUpload', add_custom_header)
 
-    def run(self):
+    def run(self) -> None:
         """
         Loop, reading the task queue, until we complete the upload
         """
@@ -95,16 +96,16 @@ class LiveReadUploader(Thread):
         """
         return self._task_queue.get(block=block)
 
-    def wait_until_complete(self):
+    def wait_until_complete(self) -> None:
         self.join()
 
-    def create_multipart_upload(self):
+    def create_multipart_upload(self) -> None:
         response = self.b2_client.create_multipart_upload(Bucket=self.bucket, Key=self.key)
         self.upload_id = response['UploadId']
         logger.debug("Created multipart upload. UploadId is %s", self.upload_id)
         return False
 
-    def upload_part(self, buffer: bytes):
+    def upload_part(self, buffer: bytes) -> None:
         logger.debug("Uploading part number %s with size %s", self.part_number, len(buffer))
         response = self.b2_client.upload_part(
             Bucket=self.bucket,
@@ -122,7 +123,7 @@ class LiveReadUploader(Thread):
         self.bytes_written += len(buffer)
         return False
 
-    def complete_multipart_upload(self):
+    def complete_multipart_upload(self) -> None:
         if len(self.parts) > 0:
             logger.debug("Completing multipart upload with %s parts", len(self.parts))
             self.b2_client.complete_multipart_upload(
@@ -146,7 +147,7 @@ class LiveReadUploader(Thread):
         return True
 
 
-def add_custom_header(params, **_kwargs):
+def add_custom_header(params: dict[str, Any], **_kwargs):
     """
     Add the Live Read custom headers to the outgoing request.
     See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html

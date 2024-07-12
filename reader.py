@@ -27,6 +27,7 @@ def parse_command_line_args() -> argparse.Namespace:
     parser.add_argument('--debug', action='store_true', help='debug logging')
     parser.add_argument('--debug-boto', action='store_true', help='debug logging for boto3')
     parser.add_argument('--queue-size', type=int, required=False, default=DEFAULT_QUEUE_SIZE, help='queue size')
+    parser.add_argument('--anon', action='store_true', help='access B2 without credentials')
     args = parser.parse_args()
     return args
 
@@ -45,7 +46,7 @@ def main() -> None:
     load_env_vars()
 
     downloader = LiveReadDownloader(os.environ['BUCKET_NAME'], args.key, args.poll_interval, args.chunk_size,
-                                    args.queue_size, args.no_wait)
+                                    args.queue_size, args.no_wait, args.anon)
     downloader.start()
 
     write_data_from_queue(args.filename, downloader)

@@ -8,6 +8,8 @@ from threading import Thread
 from typing import Any
 
 import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
 from botocore.exceptions import ClientError, ResponseStreamingError
 
 logger = logging.getLogger(__name__)
@@ -18,7 +20,8 @@ class LiveReadDownloader(Thread):
     LiveReadDownloader encapsulates all the logic associated with a Live Read download.
     """
 
-    def __init__(self, bucket: str, key: str, poll_interval: int, chunk_size: int, queue_size: int, no_wait: bool):
+    def __init__(self, bucket: str, key: str, poll_interval: int, chunk_size: int, queue_size: int, no_wait: bool,
+                 anon: bool):
         # Make this a daemon thread, so it is stopped when the foreground thread ends
         super().__init__(daemon=True)
         """
@@ -34,12 +37,13 @@ class LiveReadDownloader(Thread):
         self._poll_interval = poll_interval
         self._chunk_size = chunk_size
         self._no_wait = no_wait
+        self._anon = anon
 
         # Create a boto3 client based on configuration in .env file
         # AWS_ACCESS_KEY_ID=<Your Backblaze Application Key ID>
         # AWS_SECRET_ACCESS_KEY=<Your Backblaze Application Key>
         # AWS_ENDPOINT_URL=<Your B2 bucket endpoint, with https protocol, e.g. https://s3.us-west-004.backblazeb2.com>
-        self.b2_client = boto3.client('s3')
+        self.b2_client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
         logger.debug("Created boto3 client")
 
         self.b2_client.meta.events.register('before-call.s3.GetObject', add_custom_header)
@@ -121,6 +125,9 @@ class LiveReadDownloader(Thread):
                 time.sleep(self._poll_interval)
 
     def _get_current_upload_id(self) -> str:
+        if self._anon:
+            return None
+
         # Get the UploadId of the current upload. This is the file version we will get data from
         logged = False
         while True:
@@ -144,7 +151,7 @@ class LiveReadDownloader(Thread):
             if 'Uploads' in response else None
 
     def _is_upload_in_progress(self) -> bool:
-        if self._no_wait:
+        if self._no_wait or self._anon:
             return False
 
         response = self.b2_client.list_multipart_uploads(

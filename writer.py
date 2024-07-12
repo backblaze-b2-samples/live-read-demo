@@ -27,20 +27,29 @@ default_signal_handlers: dict[int, Callable[[int, FrameType | None], Any | int |
 
 def signal_handler(sig: int, frame: FrameType | None) -> None:
     """
-    By default, Python would raise a KeyboardInterrupt on SIGINT and terminate the program on SIGTERM. We want to
-    finish processing any buffered input from stdin, at which point read_stdin_stream will return, and we will
-    complete the multipart upload. However, we still need to let the user stop the app if necessary by sending the
-    signal again.
+    By default, Python would raise a KeyboardInterrupt on SIGINT and terminate the program on SIGTERM. On the first
+    signal, we want to finish processing any buffered input from stdin, at which point read_stdin_stream will return,
+    and we will complete the multipart upload. However, we still need to stop the app immediately if the user forces
+    the issue by sending another signal.
     """
     global shutdown_requested
 
     if shutdown_requested:
-        logger.info('Caught signal %s while processing remaining data. Terminating immediately.', signal.Signals(sig).name)
-        return default_signal_handlers[sig](sig, frame)
+        # Hard shutdown
+        logger.info('Caught signal %s while processing remaining data. Terminating immediately.',
+                    signal.Signals(sig).name)
+        if sig == signal.SIGTERM:
+            # There is no default handler function for SIGTERM, so the handler is the special value SIG_DFL, rather than
+            # a callable handler. Restore the original signal handler and exit disgracefully.
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
+            os.kill(os.getpid(), signal.SIGTERM)
+        else:
+            return default_signal_handlers[sig](sig, frame)
     else:
+        # Soft shutdown
         logger.info('Caught signal %s. Processing remaining data.', signal.Signals(sig).name)
         message = 'Press Control-C' if sig == signal.SIGINT else 'Terminate the app'
-        logger.info(f'{message} again to terminate immediately.')
+        logger.info(f'{message} again to stop immediately.')
         # Stop reading data in the main loop
         shutdown_requested = True
 
@@ -95,7 +104,7 @@ def main() -> None:
 
     # # Install handler to override the KeyboardInterrupt on SIGINT or SIGTERM
     for sig in [signal.SIGINT, signal.SIGTERM]:
-        default_signal_handlers[sig] = signal.signal(signal.SIGINT, signal_handler)
+        default_signal_handlers[sig] = signal.signal(sig, signal_handler)
 
     uploader = LiveReadUploader(os.environ['BUCKET_NAME'], args.key)
     uploader.start()

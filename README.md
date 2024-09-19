@@ -14,11 +14,11 @@ This webinar explains how Live Read works and shows it in action, using OBS Stud
 
 ## How Does Live Read Work?
 
-A producer client starts a Live Read upload by sending a [`CreateMultipartUpload`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) request with one or two custom HTTP parameters: `x-bz-active-read-enabled` and, optionally, `x-bz-active-read-part-size`.`x-bz-active-read-enabled` must be set to `true` for a Live Read upload to be initiated, while `x-bz-active-read-part-size` may be set to the part size that will be used.  If `x-bz-active-read-enabled` is set to `true` and `x-bz-active-read-part-size` is not present then the size of the first part will be used. All parts except the last one must have the same size.
+A producer client starts a Live Read upload by sending a [`CreateMultipartUpload`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) request with one or two custom HTTP parameters: `x-backblaze-live-read-enabled` and, optionally, `x-backblaze-live-read-part-size`.`x-backblaze-live-read-enabled` must be set to `true` for a Live Read upload to be initiated, while `x-backblaze-live-read-part-size` may be set to the part size that will be used.  If `x-backblaze-live-read-enabled` is set to `true` and `x-backblaze-live-read-part-size` is not present then the size of the first part will be used. All parts except the last one must have the same size.
 
 The producer client then uploads a series of parts, via [`UploadPart`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html), as normal. As noted above, all parts except the last one must have the same size. Once the producer client has uploaded all of its data, it calls [`CompleteMultipartUpload`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html), again, as it usually would.
 
-Under the standard S3 API semantics, consumer clients must wait for the upload to be completed before they may download any data from the file. With Live Read, in contrast, consumer clients may attempt to download data, using [`GetObject`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) with the custom HTTP header `x-bz-active-read-enabled` set to `true`, from the file at any time after the upload is created. Consumer clients MUST include either `Range` or `PartNumber` in the `GetObject` call to specify the required portion of the file. If the client requests a range or part that does not exist, then Backblaze B2 responds with a `416 Range Not Satisfiable` error. On receiving this error, a consumer client might repeatedly retry the request, waiting for a short interval after each unsuccessful request.
+Under the standard S3 API semantics, consumer clients must wait for the upload to be completed before they may download any data from the file. With Live Read, in contrast, consumer clients may attempt to download data, using [`GetObject`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) with the custom HTTP header `x-backblaze-live-read-enabled` set to `true`, from the file at any time after the upload is created. Consumer clients MUST include either `Range` or `PartNumber` in the `GetObject` call to specify the required portion of the file. If the client requests a range or part that does not exist, then Backblaze B2 responds with a `416 Range Not Satisfiable` error. On receiving this error, a consumer client might repeatedly retry the request, waiting for a short interval after each unsuccessful request.
 
 After the upload is completed, clients can retrieve the file using standard S3 API calls.
 
@@ -51,7 +51,7 @@ def add_custom_header(params, **_kwargs):
   Add the Live Read custom headers to the outgoing request.
   See https://boto3.amazonaws.com/v1/documentation/api/latest/guide/events.html
   """
-  params['headers']['x-bz-live-read-enabled'] = 'true'
+  params['headers']['x-backblaze-live-read-enabled'] = 'true'
 ```
 
 ## What Are Fragmented MP4 Streams?
